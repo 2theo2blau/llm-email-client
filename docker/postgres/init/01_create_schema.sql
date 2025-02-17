@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS emails (
+    id SERIAL PRIMARY KEY,
+    message_id VARCHAR(255) UNIQUE NOT NULL,
+    sender VARCHAR(255) NOT NULL,
+    recipient VARCHAR(255) NOT NULL,
+    subject TEXT,
+    body TEXT,
+    timestamp TIMESTAMP WITH TIME ZONE,
+    raw_email TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    processed BOOLEAN DEFAULT FALSE
+);

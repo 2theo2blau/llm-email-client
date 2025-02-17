@@ -2,7 +2,7 @@ services:
   postgres:
     build:
       context: ./docker/postgres
-      dockerfile: dockerfile
+      dockerfile: Dockerfile
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -17,4 +17,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    
+  
+  app:
+    build:
+      context: .
+      dockerfile: ./docker/python/Dockerfile
+    environment:
+      DB_HOST=${DB_HOST}
+      DB_PORT=${DB_PORT}
+      DB_NAME=${DB_NAME}
+      DB_USER=${DB_USER
+      DB_PASSWORD=${DB_PASSWORD}
+      IMAP_SERVER=${IMAP_SERVER}
+      IMAP_USER=${IMAP_USER}
+      IMAP_PASSWORD=${IMAP_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes: ./src:/app/src

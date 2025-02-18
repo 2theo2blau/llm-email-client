@@ -2,14 +2,14 @@
 
 import os
 import psycopg2
-from email.email_monitor import EmailMonitor
+from src.email.email_monitor import EmailMonitor
 from dotenv import load_dotenv
 
 def main():
     load_dotenv()
 
     # Initialize postgres DB connection
-    db_conn = psycopg2.connect(
+    db_connection = psycopg2.connect(
         dbname=os.getenv("DB_NAME"),
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
@@ -20,16 +20,17 @@ def main():
     # Initialize email monitor
     monitor = EmailMonitor(
         imap_server=os.getenv("IMAP_SERVER"),
-        email_address=os.getenv("IMAP_USER"),
-        email_password=os.getenv("IMAP_PASSWORD"),
-        db_conn=db_conn
+        imap_port=os.getenv("IMAP_PORT"),
+        email=os.getenv("EMAIL"),
+        email_password=os.getenv("EMAIL_PASSWORD"),
+        db_connection=db_connection
     )
 
     try:
         monitor.connect()
         monitor.run()
     finally:
-        db_conn.close()
+        db_connection.close()
 
 if __name__ == "__main__":
     main()

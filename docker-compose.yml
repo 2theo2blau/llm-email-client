@@ -1,5 +1,6 @@
 services:
   postgres:
+    container_name: postgres
     build:
       context: ./docker/postgres
       dockerfile: Dockerfile
@@ -12,26 +13,59 @@ services:
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    user: "999:999"
     healthcheck:
-      test: ["CMD_SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+    networks:
+      - llm-email-net
   
   app:
+    container_name: llm-email-monitor
     build:
       context: .
       dockerfile: ./docker/python/Dockerfile
     environment:
-      DB_HOST=${DB_HOST}
-      DB_PORT=${DB_PORT}
-      DB_NAME=${DB_NAME}
-      DB_USER=${DB_USER
-      DB_PASSWORD=${DB_PASSWORD}
-      IMAP_SERVER=${IMAP_SERVER}
-      IMAP_USER=${IMAP_USER}
-      IMAP_PASSWORD=${IMAP_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      IMAP_SERVER: ${IMAP_SERVER}
+      IMAP_PORT: ${IMAP_PORT}
+      EMAIL: ${EMAIL}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
-    volumes: ./src:/app/src
+      protonmail-bridge:
+        condition: service_started
+    volumes: 
+      - ./src:/app/src
+    restart: unless-stopped
+    networks:
+      - llm-email-net
+
+  protonmail-bridge:
+    container_name: protonmail-bridge
+    image: shenxn/protonmail-bridge
+    ports:
+      - "1025:25/tcp"
+      - "1143:143/tcp"
+    restart: unless-stopped
+    volumes:
+      - protonmail:/root
+    networks:
+      - llm-email-net
+
+volumes:
+  protonmail:
+    name: protonmail
+    external: true
+
+networks:
+  llm-email-net:
+    driver: bridge

@@ -22,25 +22,45 @@ class EmailMessage:
 class EmailMonitor:
     def __init__(self, 
                  imap_server: str,
-                 email_address: str,
-                 password: str,
+                 imap_port: int,
+                 email: str,
+                 email_password: str,
                  db_connection):
         self.imap_server = imap_server
-        self.email_address = email_address
-        self.password = password
+        self.imap_port = imap_port
+        self.email = email
+        self.email_password = email_password
         self.db = db_connection
         self.mail = None
     
     def connect(self) -> None:
         """Establish connection to IMAP server"""
         try:
-            self.mail = imaplib.IMAP4_SSL(self.imap_server)
-            self.mail.login(self.email_address, self.password)
+            self.mail = imaplib.IMAP4(self.imap_server, self.imap_port, timeout=10)
+
+            email = self.email.strip("'\"")
+            email_password = self.email_password.strip("'\"")
+
+            self.mail.login(self.email, self.email_password)
+        
+            status, messages = self.mail.select('INBOX')
+            if status != 'OK':
+                raise imaplib.IMAP4.error(f"Failed to select INBOX: {messages[0].decode()}")
+        
+        except imaplib.IMAP4.error as e:
+            print(f"IMAP authentication failed: {e}")
+            raise
+        except ConnectionRefusedError as e:
+            print(f"Connection refused by {self.imap_server}: {e}")
+            raise
+        except TimeoutError as e:
+            print(f"Connection timeout to {self.imap_server}: {e}")
+            raise
         except Exception as e:
             print(f"Error connecting to IMAP server: {e}")
             raise
 
-    def parse_email_message(self, email_message)
+    def parse_email_message(self, email_data: bytes) -> EmailMessage:
         email_message = email.message_from_bytes(email_data)
 
         # extract headers
@@ -105,8 +125,8 @@ class EmailMonitor:
             for msg_num in messages[0].split():
                 _, msg_data = self.mail.fetch(msg_num, '(RFC822)')
                 email_body = msg_data[0][1]
-                email_msg = self.parse_email_message(email_body)
-                self.store_email(email_msg)
+                email_message = self.parse_email_message(email_body)
+                self.store_email(email_message)
 
         except Exception as e:
             print(f"Error checking new emails: {e}")

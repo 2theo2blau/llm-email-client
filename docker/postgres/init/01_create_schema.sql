@@ -16,9 +16,11 @@ CREATE TABLE IF NOT EXISTS responses (
     id SERIAL PRIMARY KEY,
     original_email_id INTEGER REFERENCES emails(id),
     response_message_id VARCHAR(255),
+    original_sender VARCHAR(255) REFERENCES emails(sender),
     response_subject TEXT NOT NULL,
     response_body TEXT NOT NULL,
     model_used VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    generated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    sent_at TIMESTAMP WITH TIME ZONE,
     sent BOOLEAN DEFAULT FALSE
 )

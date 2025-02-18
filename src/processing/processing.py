@@ -5,7 +5,7 @@ from datetime import datetime
 import requests
 import os
 import time
-from email.email_monitor import EmailMessage
+from src.email.email_monitor import EmailMessage
 
 @dataclass
 class UnprocessedEmail:
@@ -31,6 +31,7 @@ class EmailProcessor:
                  api_base_url: str,
                  api_key: str,
                  model: str,
+                 agent_id: str,
                  smtp_server: str,
                  smtp_port: int,
                  email: str,
@@ -40,6 +41,7 @@ class EmailProcessor:
         self.api_base_url = api_base_url
         self.api_key = api_key
         self.model = model
+        self.agent_id = agent_id
         self.batch_size = batch_size
 
         self.smtp_server = smtp_server
@@ -93,14 +95,14 @@ class EmailProcessor:
         data = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": ""},
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.9
+            "temperature": 1.0,
+            "agent_id": self.agent_id,
         }
 
         response = requests.post(
-            f"{self.api_base_url}/v1/chat/completions",
+            f"{self.api_base_url}/v1/agents/completions",
             headers=headers,
             json=data
         )
@@ -164,7 +166,7 @@ class EmailProcessor:
             # add delay between requests
             time.sleep(1)
 
-    def send_response(self, response_id: int) -> None:
+    def send_responses(self, response_id: int) -> None:
         """Send the response using SMTP"""
         with self.db.cursor() as cur:
             cur.execute("""
@@ -185,7 +187,7 @@ class EmailProcessor:
 
             # create response email
             email_message = EmailMessage()
-            email_message["From"] = self.smtp_user
+            email_message["From"] = self.email
             email_message["To"] = sender
             email_message["Subject"] = subject
             email_message["In-Reply-To"] = message_id
@@ -194,7 +196,7 @@ class EmailProcessor:
 
             try:
                 with smtplib.SMTP(self.email, self.smtp_port) as smtp_server:
-                    smtp_server.login(self.smtp_user, self.smtp_password)
+                    smtp_server.login(self.email, self.email_password)
                     smtp_server.send_message(email_message)
                     print(f"Response {response_id} sent to {sender}")
 
@@ -210,3 +212,12 @@ class EmailProcessor:
                 print(f"Error sending response {response_id}: {e}")
                 self.db.rollback()
 
+    def run(self) -> None:
+        while True:
+            try:
+                self.process_emails()
+                self.send_responses()
+                time.sleep(30)
+            except Exception as e:
+                print(f"Error in email processor: {e}")
+                time.sleep(30)

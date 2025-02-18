@@ -1,3 +1,16 @@
+CREATE TABLE IF NOT EXISTS responses (
+    id SERIAL PRIMARY KEY,
+    original_email_id INTEGER,
+    response_message_id VARCHAR(255),
+    original_sender VARCHAR(255),
+    response_subject TEXT NOT NULL,
+    response_body TEXT NOT NULL,
+    model_used VARCHAR(255) NOT NULL,
+    generated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    sent_at TIMESTAMP WITH TIME ZONE,
+    sent BOOLEAN DEFAULT FALSE
+);
+
 CREATE TABLE IF NOT EXISTS emails (
     id SERIAL PRIMARY KEY,
     message_id VARCHAR(255) UNIQUE NOT NULL,
@@ -12,15 +25,6 @@ CREATE TABLE IF NOT EXISTS emails (
     response_id INTEGER REFERENCES responses(id)
 );
 
-CREATE TABLE IF NOT EXISTS responses (
-    id SERIAL PRIMARY KEY,
-    original_email_id INTEGER REFERENCES emails(id),
-    response_message_id VARCHAR(255),
-    original_sender VARCHAR(255) REFERENCES emails(sender),
-    response_subject TEXT NOT NULL,
-    response_body TEXT NOT NULL,
-    model_used VARCHAR(255) NOT NULL,
-    generated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    sent_at TIMESTAMP WITH TIME ZONE,
-    sent BOOLEAN DEFAULT FALSE
-)
+ALTER TABLE responses
+ADD CONSTRAINT fk_original_email
+FOREIGN KEY (original_email_id) REFERENCES emails(id);

@@ -6,6 +6,7 @@ import requests
 import os
 import time
 from src.email.email_monitor import EmailMessage
+from dotenv import load_dotenv
 
 @dataclass
 class UnprocessedEmail:
@@ -19,10 +20,10 @@ class UnprocessedEmail:
 @dataclass
 class LLMResponse:
     original_email_id: int
-    response_text: str
+    response_subject: str
+    response_body: str
     generated_at: datetime
     model_used: str
-    prompt_used: str
     sent_at: datetime
 
 class EmailProcessor:
@@ -93,11 +94,11 @@ class EmailProcessor:
         }
 
         data = {
-            "model": self.model,
+            # "model": self.model,
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 1.0,
+            # "temperature": 1.0,
             "agent_id": self.agent_id,
         }
 
@@ -117,15 +118,16 @@ class EmailProcessor:
         with self.db.cursor() as cur:
             cur.execute("""
             INSERT INTO responses
-            (original_email_id, response_text, generated_at, model_used, prompt_used)
-            VALUES (%s, %s, %s, %s, %s)
+            (original_email_id, response_subject, response_body, generated_at, model_used, sent_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id
             """, (
             response.original_email_id,
-            response.response_text,
+            response.response_subject,
+            response.response_body,
             response.generated_at,
             response.model_used,
-            response.prompt_used
+            response.sent_at,
             ))
             response_id = cur.fetchone()[0]
 
@@ -146,14 +148,16 @@ class EmailProcessor:
         for email in emails:
             try:
                 prompt = self.create_prompt(email)
-                response_text = self.query_llm(prompt)
+                response_body = self.query_llm(prompt)
+                response_subject = f"Re: {email.subject}" if not email.subject.startswith("Re:") else email.subject
 
                 response = LLMResponse(
                     original_email_id=email.id,
-                    response_text=response_text,
-                    model_used=self.model,
-                    prompt_used=prompt,
+                    response_body=response_body,
+                    response_subject=response_subject,
+                    model_used="mistral-agent",
                     generated_at=datetime.now(),
+                    sent_at=None
                 )
 
                 self.store_response(response)
@@ -164,13 +168,13 @@ class EmailProcessor:
                 continue
 
             # add delay between requests
-            time.sleep(1)
+            # time.sleep(1)
 
     def send_responses(self, response_id: int) -> None:
         """Send the response using SMTP"""
         with self.db.cursor() as cur:
             cur.execute("""
-            SELECT r.id, r.response_text, r.original_email_id, e.message_id, e.sender, e.subject
+            SELECT r.id, r.response_subject, r.response_body, r.original_email_id, e.message_id, e.sender, e.subject
             FROM responses r
             JOIN emails e ON e.id = r.original_email_id
             WHERE r.id = %s AND r.sent = FALSE
@@ -181,18 +185,16 @@ class EmailProcessor:
                 print(f"Response {response_id} not found")
                 return
 
-            _, response_text, original_email_id, message_id, sender, original_subject = result
-
-            subject = f"Re: {original_subject}" if not original_subject.startswith("Re:") else original_subject
+            _, response_subject,response_body, original_email_id, message_id, sender, original_subject = result
 
             # create response email
             email_message = EmailMessage()
             email_message["From"] = self.email
             email_message["To"] = sender
-            email_message["Subject"] = subject
+            email_message["Subject"] = response_subject
             email_message["In-Reply-To"] = message_id
             email_message["References"] = message_id
-            email_message.set_content(response_text)
+            email_message.set_content(response_body)
 
             try:
                 with smtplib.SMTP(self.email, self.smtp_port) as smtp_server:
@@ -212,12 +214,28 @@ class EmailProcessor:
                 print(f"Error sending response {response_id}: {e}")
                 self.db.rollback()
 
-    def run(self) -> None:
+    def run(self, check_interval: int = 10) -> None:
+        print(f"[{datetime.now()}] Starting email processor")
+
         while True:
             try:
+                print(f"[{datetime.now()}] Processing new emails")
                 self.process_emails()
-                self.send_responses()
-                time.sleep(30)
+                
+                with self.db.cursor() as cur:
+                    cur.execute("""
+                        SELECT id FROM responses
+                        WHERE sent = FALSE
+                        ORDER BY generated_at ASC
+                    """)
+                    unsent_responses = cur.fetchall()
+
+                    for (response_id,) in unsent_responses:
+                        print(f"[{datetime.now()}] Sending response {response_id}")
+                        self.send_responses(response_id)
+
+                    time.sleep(check_interval)
+
             except Exception as e:
                 print(f"Error in email processor: {e}")
-                time.sleep(30)
+                time.sleep(check_interval)

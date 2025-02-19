@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS emails (
     body TEXT,
     timestamp TIMESTAMP WITH TIME ZONE,
     raw_email TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     processed BOOLEAN DEFAULT FALSE,
     response_id INTEGER REFERENCES responses(id)
 );

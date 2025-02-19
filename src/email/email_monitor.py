@@ -18,6 +18,9 @@ class EmailMessage:
     body: str
     timestamp: datetime
     raw_email: str
+    processed: bool = False
+    response_id: Optional[int] = None
+
 
 class EmailMonitor:
     def __init__(self, 
@@ -92,7 +95,9 @@ class EmailMonitor:
             subject=subject,
             body=body,
             timestamp=timestamp,
-            raw_email=str(email_message)
+            raw_email=str(email_message),
+            processed=False,
+            response_id=None
         )
     
     def store_email(self, email_message: EmailMessage) -> None:
@@ -100,8 +105,8 @@ class EmailMonitor:
         with self.db.cursor() as cur:
             cur.execute("""
                 INSERT INTO emails
-                (message_id, sender, recipient, subject, body, timestamp, raw_email)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                (message_id, sender, recipient, subject, body, timestamp, raw_email, processed, response_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (message_id) DO NOTHING
                 """, 
                 (
@@ -111,7 +116,9 @@ class EmailMonitor:
                     email_message.subject,
                     email_message.body,
                     email_message.timestamp,
-                    email_message.raw_email
+                    email_message.raw_email,
+                    email_message.processed,
+                    email_message.response_id
                 )
             )
         self.db.commit()
@@ -119,20 +126,35 @@ class EmailMonitor:
     def check_new_emails(self) -> None:
         """Check for new emails in inbox"""
         try:
+            print("Selecting INBOX")
             self.mail.select('INBOX')
-            _, messages = self.mail.search(None, 'UNSEEN')
+            print("Searching for emails")
+            _, messages = self.mail.search(None, 'ALL')
+            print(f"Found {len(messages[0].split())} emails")
+
+            with self.db.cursor() as cur:
+                cur.execute("SELECT message_id FROM emails")
+                existing_ids = {row[0] for row in cur.fetchall()}
+                print(f"Found {len(existing_ids)} existing emails in database")
 
             for msg_num in messages[0].split():
-                _, msg_data = self.mail.fetch(msg_num, '(RFC822)')
-                email_body = msg_data[0][1]
-                email_message = self.parse_email_message(email_body)
-                self.store_email(email_message)
+                try:
+                    _, msg_data = self.mail.fetch(msg_num, '(RFC822)')
+                    email_body = msg_data[0][1]
+                    email_message = self.parse_email_message(email_body)
+                    
+                    if email_message.message_id not in existing_ids:
+                        self.store_email(email_message)
+                        print(f"New email stored: {email_message.message_id} with subject: {email_message.subject}")
+
+                except Exception as e:
+                    print(f"Error processing email {msg_num}: {e}")
 
         except Exception as e:
             print(f"Error checking new emails: {e}")
             self.connect()
 
-    def run(self, check_interval: int = 30) -> None:
+    def run(self, check_interval: int = 10) -> None:
         while True:
             try:
                 self.check_new_emails()

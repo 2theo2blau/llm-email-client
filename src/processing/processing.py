@@ -3,9 +3,11 @@ import smtplib
 from typing import List, Optional
 from datetime import datetime
 import requests
-import os
 import time
+import os
 from email.message import EmailMessage
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 @dataclass
 class UnprocessedEmail:
@@ -48,6 +50,8 @@ class EmailProcessor:
         self.smtp_port = smtp_port
         self.email = email
         self.email_password = email_password
+
+        self.template_path = os.path.join(os.path.dirname(__file__), "../templates/email-template.html")
 
     def get_unprocessed_emails(self) -> List[UnprocessedEmail]:
         """Fetch new or unprocessed emails from the database"""
@@ -139,11 +143,23 @@ class EmailProcessor:
             """, (response_id, response.original_email_id))
 
             self.db.commit()
+            print(f"Response {response_id} stored in database")
             return response_id
         
+    def load_template(self) -> str:
+        with open(self.template_path, "r") as file:
+            return file.read()
+        
+    def insert_into_template(self, response_body: str) -> str:
+        formatted_response = response_body.replace("\n", "<br>")
+        template = self.load_template()
+        template_response = template.replace("{response_body}", formatted_response)
+        return template_response
+    
     def process_emails(self) -> None:
         """Process batch of unprocessed emails"""
         emails = self.get_unprocessed_emails()
+        print(f"Found {len(emails)} unprocessed emails")
 
         for email in emails:
             try:
@@ -188,13 +204,22 @@ class EmailProcessor:
             _, response_subject,response_body, original_email_id, message_id, sender, original_subject = result
 
             # create response email
-            email_message = EmailMessage()
+            email_message = MIMEMultipart('alternative')
             email_message["From"] = self.email
             email_message["To"] = sender
             email_message["Subject"] = response_subject
             email_message["In-Reply-To"] = message_id
             email_message["References"] = message_id
-            email_message.set_content(response_body)
+            
+            body_text = MIMEText(response_body, 'plain')
+            
+            html_body = self.insert_into_template(response_body)
+            html_email = MIMEText(html_body, 'html')
+
+            email_message.attach(body_text)
+            email_message.attach(html_email)
+
+            # email_message.set_content(response_body)
 
             try:
                 with smtplib.SMTP(self.smtp_server, self.smtp_port) as smtp_server:

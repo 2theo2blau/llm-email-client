@@ -55,7 +55,8 @@ class EmailProcessor:
             cur.execute("""
             SELECT id, message_id, sender, subject, body, timestamp
             FROM emails
-            WHERE processed = FALSE AND response_id IS NULL
+            WHERE processed = FALSE
+            AND id NOT IN (SELECT original_email_id FROM responses)
             LIMIT %s
             """, (self.batch_size,))
 

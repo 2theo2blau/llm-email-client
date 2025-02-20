@@ -5,8 +5,7 @@ from datetime import datetime
 import requests
 import os
 import time
-from src.email.email_monitor import EmailMessage
-from dotenv import load_dotenv
+from email.message import EmailMessage
 
 @dataclass
 class UnprocessedEmail:
@@ -197,7 +196,7 @@ class EmailProcessor:
             email_message.set_content(response_body)
 
             try:
-                with smtplib.SMTP(self.email, self.smtp_port) as smtp_server:
+                with smtplib.SMTP(self.smtp_server, self.smtp_port) as smtp_server:
                     smtp_server.login(self.email, self.email_password)
                     smtp_server.send_message(email_message)
                     print(f"Response {response_id} sent to {sender}")

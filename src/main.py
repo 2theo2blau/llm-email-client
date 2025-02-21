@@ -32,6 +32,7 @@ def main():
     )
 
     sender = EmailSender(
+        db_connection=db_connection,
         smtp_server=os.getenv("SMTP_SERVER"),
         smtp_port=os.getenv("SMTP_PORT"),
         email=os.getenv("EMAIL"),

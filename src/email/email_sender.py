@@ -6,10 +6,12 @@ import os
 
 class EmailSender:
     def __init__(self,
+                 db_connection,
                  smtp_server: str,
                  smtp_port: int,
                  email: str,
                  email_password: str):
+        self.db = db_connection
         self.smtp_server = smtp_server
         self.smtp_port = smtp_port
         self.email = email

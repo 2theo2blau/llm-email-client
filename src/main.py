@@ -3,7 +3,9 @@
 import os
 import psycopg2
 from src.email.email_monitor import EmailMonitor
-from src.processing.processing import EmailProcessor
+from src.email.email_sender import EmailSender
+from src.processing.response_processing import EmailProcessor
+from src.llm.llm_processing import LLMProcessor
 from dotenv import load_dotenv
 import time
 import threading
@@ -29,28 +31,37 @@ def main():
         db_connection=db_connection
     )
 
-    processor = EmailProcessor(
-        db_connection=db_connection,
-        api_base_url=os.getenv("LLM_API_BASE_URL"),
-        api_key=os.getenv("LLM_API_KEY"),
-        model=os.getenv("API_MODEL"),
-        agent_id=os.getenv("AGENT_ID"),
+    sender = EmailSender(
         smtp_server=os.getenv("SMTP_SERVER"),
         smtp_port=os.getenv("SMTP_PORT"),
         email=os.getenv("EMAIL"),
         email_password=os.getenv("EMAIL_PASSWORD")
     )
 
+    llm_processor = LLMProcessor(
+        db_connection=db_connection,
+        api_base_url=os.getenv("LLM_API_BASE_URL"),
+        api_key=os.getenv("LLM_API_KEY"),
+        model=os.getenv("API_MODEL"),
+        agent_id=os.getenv("AGENT_ID")
+    )
+
+    response_processor = EmailProcessor(
+        db_connection=db_connection,
+        llm_processor=llm_processor,
+        email_sender=sender,
+        batch_size=4
+    )
    
     try:
         monitor.connect()
         print("Email monitor connected")
 
         monitor_thread = threading.Thread(target=monitor.run, name="EmailMonitor")
-        processor_thread = threading.Thread(target=processor.run, name="EmailProcessor")
+        response_thread = threading.Thread(target=response_processor.run, name="EmailSender")
 
         monitor_thread.start()
-        processor_thread.start()
+        response_thread.start()
 
         try:
             while True:
@@ -60,7 +71,7 @@ def main():
             
 
         monitor_thread.join()
-        processor_thread.join()
+        response_thread.join()
 
     except Exception as e:
         print(f"Error in main: {e}")
